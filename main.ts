@@ -22,7 +22,17 @@ const HANDOFF =
 const INSTRUCTION =
   "Please rephrase your request as a coffee order and join the queue.";
 
-const ENTRY = [STATUS, HANDOFF, INSTRUCTION].join(" ");
+// Compose the reply from its three beats. Each beat must carry real text:
+// a blank beat would silently collapse the reply into a shorter, weaker
+// auto-reply, so fail loudly instead of joining an empty part.
+function buildEntry(beats: string[]): string {
+  for (const beat of beats) {
+    if (beat.trim().length === 0) fail("entry beat is empty");
+  }
+  return beats.join(" ");
+}
+
+const ENTRY = buildEntry([STATUS, HANDOFF, INSTRUCTION]);
 
 const MAX_CHARS = 280;
 const OUT_DIR = "/output";
@@ -33,13 +43,19 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-// Gate checks, mirroring the sealed scorer: UTF-8 text of 1 to 280
-// characters, not only white space, a single line.
-if (ENTRY.trim().length === 0) fail("entry is empty or only whitespace");
-if (ENTRY.length > MAX_CHARS) {
-  fail(`entry is ${ENTRY.length} characters, over the ${MAX_CHARS} limit`);
+// Validate the composed entry before writing it out. Mirrors the sealed
+// scorer's gate: UTF-8 text of 1 to 280 characters, not only white space,
+// a single line. Fails fast with a clear message instead of writing a
+// reply the scorer would reject.
+function validateEntry(text: string): void {
+  if (text.trim().length === 0) fail("entry is empty or only whitespace");
+  if (text.length > MAX_CHARS) {
+    fail(`entry is ${text.length} characters, over the ${MAX_CHARS} limit`);
+  }
+  if (/[\r\n]/.test(text)) fail("entry must be a single line");
 }
-if (/[\r\n]/.test(ENTRY)) fail("entry must be a single line");
+
+validateEntry(ENTRY);
 
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(OUT_FILE, ENTRY, "utf8");
